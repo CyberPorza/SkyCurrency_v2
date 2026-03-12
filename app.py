@@ -7,44 +7,42 @@ app = Flask(__name__)
 @app.route('/')
 def index():
     # --- DÖVİZ VERİSİ ---
-    usd_try = eur_try = "N/A"
+    usd_try = 0
+    eur_try = 0
     try:
-        # Kayıt istemeyen en hızlı döviz API'ı
         res = requests.get("https://api.exchangerate-api.com/v4/latest/USD", timeout=10)
         data = res.json()
-        usd_try = round(data['rates']['TRY'], 2)
-        eur_try = round(data['rates']['TRY'] / data['rates']['EUR'], 2)
-    except:
-        pass
-
-    # --- GRAM ALTIN (YAHOO FINANCE) ---
-    gram_altin = "N/A"
-    try:
-        # 'GC=F' Altın Ons sembolüdür. Yahoo Finance'den çekiyoruz.
-        gold_data = yf.Ticker("GC=F")
-        ons_usd = gold_data.fast_info['last_price']
-        
-        if usd_try != "N/A":
-            # Gram Altın Hesabı: (Ons / 31.1035) * Dolar Kuru
-            gram_altin = round((ons_usd / 31.1035) * usd_try, 2)
+        usd_try = data['rates'].get('TRY', 0)
+        eur_val = data['rates'].get('EUR', 1)
+        eur_try = round(usd_try / eur_val, 2)
     except Exception as e:
-        print(f"Altın çekilemedi: {e}")
+        print(f"!!! DOVIZ HATASI: {e}")
 
-    # --- HAVA DURUMU ---
-    temp = desc = feels_like = humidity = "--"
+    # --- ALTIN VERİSİ ---
+    gram_altin = "Hesaplanamadı"
     try:
-        w_res = requests.get("https://wttr.in/Istanbul?format=j1", timeout=10)
-        w_data = w_res.json()['current_condition'][0]
-        temp = w_data['temp_C']
-        desc = w_data.get('lang_tr', [{'value': w_data['weatherDesc'][0]['value']}])[0]['value']
-        feels_like = w_data['FeelsLikeC']
-        humidity = w_data['humidity']
-    except:
-        pass
+        # Altın Ons fiyatını Yahoo'dan çekiyoruz
+        gold_ticker = yf.Ticker("GC=F")
+        # fast_info yerine daha garanti olan history metodunu kullanalım
+        hist = gold_ticker.history(period="1d")
+        if not hist.empty:
+            ons_usd = hist['Close'].iloc[-1]
+            print(f"DEBUG: Ons Fiyatı Çekildi: {ons_usd}")
+            
+            if usd_try > 0:
+                gram_altin = round((ons_usd / 31.1035) * usd_try, 2)
+            else:
+                gram_altin = "Kur Bekleniyor"
+        else:
+            print("!!! ALTIN HATASI: Veri boş geldi (Market kapalı olabilir mi?)")
+    except Exception as e:
+        print(f"!!! ALTIN SISTEM HATASI: {e}")
 
     return render_template('index.html', 
-                           usd=usd_try, eur=eur_try, gold=gram_altin,
-                           temp=temp, desc=desc, feels=feels_like, hum=humidity)
+                           usd=usd_try if usd_try > 0 else "Hata", 
+                           eur=eur_try if eur_try > 0 else "Hata", 
+                           gold=gram_altin,
+                           temp="8", desc="Bulutlu", feels="6", hum="66") # Hava durumu şimdilik sabit kalsın, sorunu daraltalım
 
 if __name__ == "__main__":
     app.run(debug=True)
