@@ -9,21 +9,34 @@ HEADERS = {
 
 @app.route('/')
 def index():
-    # --- DÖVİZ VE ALTIN VERİSİ ---
+    # Varsayılan Değerler
     usd_try = eur_try = gram_altin = "N/A"
+    
+    # --- DÖVİZ VE ALTIN VERİSİ ---
     try:
-        curr_res = requests.get("https://api.exchangerate-api.com/v4/latest/USD", headers=HEADERS, timeout=10)
+        # Alternatif ve daha kapsamlı bir API kullanıyoruz
+        curr_res = requests.get("https://open.er-api.com/v6/latest/USD", headers=HEADERS, timeout=10)
         if curr_res.status_code == 200:
             data = curr_res.json()
-            usd_val = data['rates'].get('TRY', 0)
-            eur_val = data['rates'].get('EUR', 1)
-            usd_try = round(usd_val, 2)
-            eur_try = round(usd_val / eur_val, 2)
+            rates = data.get('rates', {})
             
-            xau_rate = data['rates'].get('XAU', 0)
-            if xau_rate > 0:
-                ons_usd = 1 / xau_rate
-                gram_altin = round((ons_usd / 31.1035) * usd_val, 2)
+            usd_val = rates.get('TRY', 0)
+            eur_val = rates.get('EUR', 0)
+            xau_val = rates.get('XAU', 0) # Ons Altın verisi
+            
+            # Dolar ve Euro (TRY karşılığı)
+            if usd_val > 0:
+                usd_try = round(usd_val, 2)
+                if eur_val > 0:
+                    eur_try = round(usd_val / eur_val, 2)
+                
+                # Gram Altın Hesabı
+                if xau_val > 0:
+                    # Bazı API'lar 1 USD kaç Ons eder onu verir (küçük sayı)
+                    # Bazıları 1 Ons kaç USD eder onu verir (büyük sayı)
+                    # Eğer sayı çok küçükse (0.1'den küçükse), 1/xau_val yaparak fiyata ulaşırız
+                    ons_fiyati = xau_val if xau_val > 100 else (1 / xau_val if xau_val > 0 else 0)
+                    gram_altin = round((ons_fiyati / 31.1035) * usd_val, 2)
     except Exception as e:
         print(f"Döviz hatası: {e}")
 
